@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Means-End Analysis in AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #05070f;
+    --surface: #0c1020;
+    --surface2: #111827;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --border: rgba(0,229,255,0.15);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body { font-family: 'Inter', sans-serif; color: var(--text); }
+
+  .deck { width: 100vw; height: 100vh; position: relative; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 44px 64px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    transform: translateY(18px);
+    overflow: hidden;
+  }
+  .slide.active { opacity: 1; pointer-events: all; transform: translateY(0); }
+  .slide.out    { opacity: 0; transform: translateY(-18px); }
+
+  /* BG LAYER */
+  .slide::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,229,255,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 40% at 90% 100%, rgba(124,58,237,0.05) 0%, transparent 60%);
+  }
+  .grid-bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* HEADER */
+  .slide-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 30px; position: relative; z-index: 2;
+    border-bottom: 1px solid var(--border); padding-bottom: 14px;
+  }
+  .slide-label { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:.2em; color:var(--accent); text-transform:uppercase; }
+  .slide-num   { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); }
+
+  /* ── TITLE SLIDE ── */
+  .slide-title { background:var(--bg); justify-content:center; align-items:center; text-align:center; }
+  .title-badge {
+    display:inline-flex; align-items:center; gap:8px;
+    background:rgba(0,229,255,0.08); border:1px solid rgba(0,229,255,0.2);
+    border-radius:20px; padding:6px 16px;
+    font-family:'DM Mono',monospace; font-size:11px; letter-spacing:.15em; color:var(--accent); margin-bottom:28px;
+  }
+  .title-badge span { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--accent); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+  .main-title {
+    font-family:'Syne',sans-serif; font-size:clamp(38px,5.2vw,68px); font-weight:800;
+    line-height:1.05; color:#fff; letter-spacing:-.02em; margin-bottom:18px;
+  }
+  .main-title em { font-style:normal; background:linear-gradient(135deg,#00e5ff,#7c3aed); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .subtitle { font-size:17px; color:var(--muted); font-weight:300; letter-spacing:.01em; max-width:520px; line-height:1.6; margin-bottom:44px; }
+  .title-meta { display:flex; gap:28px; align-items:center; font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); }
+  .title-meta-item { display:flex; align-items:center; gap:8px; }
+  .dot { width:4px; height:4px; border-radius:50%; background:var(--accent); }
+  .title-deco { position:absolute; width:500px; height:500px; border-radius:50%; background:radial-gradient(circle,rgba(0,229,255,.04) 0%,transparent 70%); top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none; }
+  .title-ring { position:absolute; width:320px; height:320px; border:1px solid rgba(0,229,255,.08); border-radius:50%; top:50%; left:50%; transform:translate(-50%,-50%); animation:spin 30s linear infinite; }
+  .title-ring::after { content:''; position:absolute; width:8px; height:8px; background:var(--accent); border-radius:50%; top:-4px; left:50%; margin-left:-4px; box-shadow:0 0 12px var(--accent); }
+  @keyframes spin { from{transform:translate(-50%,-50%) rotate(0)} to{transform:translate(-50%,-50%) rotate(360deg)} }
+
+  /* ── COMMON ── */
+  .slide-content { position:relative; z-index:2; flex:1; display:flex; flex-direction:column; }
+  .content-title { font-family:'Syne',sans-serif; font-size:clamp(22px,2.8vw,36px); font-weight:700; color:#fff; letter-spacing:-.01em; margin-bottom:18px; }
+  .content-title .accent { color:var(--accent); }
+  .section-line { width:48px; height:3px; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:2px; margin-bottom:22px; }
+
+  .two-col   { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; }
+  .four-col  { display:grid; grid-template-columns:repeat(4,1fr); gap:15px; }
+
+  /* CARD */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px; position:relative; overflow:hidden; }
+  .card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent),var(--accent2)); }
+  .card-label { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.2em; color:var(--accent); text-transform:uppercase; margin-bottom:10px; }
+  .card-title { font-family:'Syne',sans-serif; font-size:17px; font-weight:700; color:#fff; margin-bottom:8px; }
+  .card-body  { font-size:13px; color:var(--muted); line-height:1.7; }
+
+  /* BULLETS */
+  .bullet-list { list-style:none; display:flex; flex-direction:column; gap:13px; }
+  .bullet-list li { display:flex; align-items:flex-start; gap:13px; font-size:14.5px; line-height:1.6; color:var(--text); }
+  .bullet-list li .icon { width:22px; height:22px; flex-shrink:0; background:rgba(0,229,255,.1); border:1px solid rgba(0,229,255,.2); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--accent); margin-top:2px; }
+  .bullet-list li strong { color:#fff; }
+
+  /* STEPS */
+  .steps { display:flex; flex-direction:column; gap:10px; }
+  .step { display:flex; align-items:center; gap:16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:13px 20px; position:relative; }
+  .step-num { width:32px; height:32px; flex-shrink:0; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-family:'DM Mono',monospace; font-size:13px; font-weight:500; color:#000; }
+  .step-text { font-size:13.5px; color:var(--text); line-height:1.5; }
+  .step-text strong { color:var(--accent); }
+
+  /* FLOW DIAGRAM */
+  .flow-diagram { display:flex; align-items:center; justify-content:center; flex:1; gap:0; flex-wrap:nowrap; }
+  .flow-node { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .flow-box { background:var(--surface); border:1.5px solid var(--border); border-radius:12px; padding:16px 18px; text-align:center; min-width:118px; position:relative; }
+  .flow-box.highlighted { border-color:var(--accent); box-shadow:0 0 24px rgba(0,229,255,.15); }
+  .flow-box.goal-box    { border-color:var(--accent3); box-shadow:0 0 24px rgba(16,185,129,.15); }
+  .flow-box-icon  { font-size:20px; margin-bottom:5px; }
+  .flow-box-label { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; color:#fff; margin-bottom:3px; }
+  .flow-box-sub   { font-size:9.5px; color:var(--muted); font-family:'DM Mono',monospace; }
+  .flow-arrow     { display:flex; flex-direction:column; align-items:center; padding:0 6px; }
+  .arrow-line     { width:52px; height:2px; background:linear-gradient(90deg,var(--muted),var(--accent)); position:relative; }
+  .arrow-line::after { content:'▶'; position:absolute; right:-8px; top:50%; transform:translateY(-50%); color:var(--accent); font-size:9px; }
+  .arrow-label    { font-family:'DM Mono',monospace; font-size:8.5px; color:var(--muted); letter-spacing:.1em; margin-top:5px; text-align:center; }
+
+  /* PATH DIAGRAM */
+  .path-diagram { display:flex; align-items:center; justify-content:center; gap:0; }
+  .path-node    { display:flex; flex-direction:column; align-items:center; gap:7px; }
+  .path-circle  { width:68px; height:68px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-size:20px; font-weight:800; }
+  .path-circle.start   { background:rgba(0,229,255,.15);  border:2px solid var(--accent);  color:var(--accent); }
+  .path-circle.mid     { background:rgba(124,58,237,.15); border:2px solid var(--accent2); color:var(--accent2); }
+  .path-circle.blocked { background:rgba(239,68,68,.15);  border:2px dashed var(--danger); color:var(--danger); }
+  .path-circle.alt     { background:rgba(245,158,11,.15); border:2px solid var(--warn);    color:var(--warn); }
+  .path-circle.end     { background:rgba(16,185,129,.15); border:2px solid var(--accent3); color:var(--accent3); box-shadow:0 0 28px rgba(16,185,129,.2); }
+  .path-label    { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace; text-align:center; }
+  .path-sublabel { font-size:9.5px; color:var(--muted); text-align:center; max-width:88px; line-height:1.4; }
+  .path-connector { width:52px; display:flex; flex-direction:column; align-items:center; padding-bottom:28px; }
+  .path-line { width:100%; height:2px; background:linear-gradient(90deg,rgba(124,58,237,.6),rgba(0,229,255,.6)); position:relative; }
+  .path-line::after { content:'▶'; position:absolute; right:-8px; top:50%; transform:translateY(-50%); font-size:9px; color:var(--accent); }
+  .path-line.blocked-line { background:linear-gradient(90deg,rgba(239,68,68,.5),rgba(239,68,68,.2)); }
+  .path-line.blocked-line::after { color:var(--danger); }
+  .path-line-label { font-size:8.5px; color:var(--muted); font-family:'DM Mono',monospace; margin-top:4px; }
+
+  /* TAG PILLS */
+  .tag        { display:inline-flex; align-items:center; gap:6px; background:rgba(0,229,255,.08);  border:1px solid rgba(0,229,255,.15);  border-radius:20px; padding:5px 13px; font-size:12px; color:var(--accent);  font-family:'DM Mono',monospace; letter-spacing:.05em; }
+  .tag.purple { background:rgba(124,58,237,.08); border-color:rgba(124,58,237,.2); color:#a78bfa; }
+  .tag.green  { background:rgba(16,185,129,.08); border-color:rgba(16,185,129,.2); color:var(--accent3); }
+  .tag.red    { background:rgba(239,68,68,.08);  border-color:rgba(239,68,68,.2);  color:#f87171; }
+  .tag.warn   { background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.2); color:var(--warn); }
+
+  /* HIGHLIGHT BOX */
+  .highlight-box { background:rgba(0,229,255,.05); border:1px solid rgba(0,229,255,.2); border-left:3px solid var(--accent); border-radius:8px; padding:14px 18px; font-size:13.5px; color:var(--text); line-height:1.65; margin-bottom:20px; }
+  .highlight-box strong { color:var(--accent); }
+
+  /* DEFINITION BLOCK */
+  .def-block { background:linear-gradient(135deg,rgba(0,229,255,.05),rgba(124,58,237,.05)); border:1px solid rgba(0,229,255,.2); border-radius:16px; padding:26px 30px; text-align:center; margin-bottom:24px; position:relative; overflow:hidden; }
+  .def-block::before { content:'"'; position:absolute; top:-10px; left:16px; font-size:80px; color:rgba(0,229,255,.08); font-family:Georgia,serif; line-height:1; }
+  .def-text { font-family:'Syne',sans-serif; font-size:17px; font-weight:600; color:#fff; line-height:1.55; position:relative; z-index:1; }
+  .def-text em { font-style:normal; color:var(--accent); }
+
+  /* JOURNEY TABLE */
+  .journey-flow { display:flex; flex-direction:column; gap:9px; flex:1; justify-content:center; }
+  .journey-step { display:grid; grid-template-columns:170px 1fr 148px; gap:14px; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:13px 18px; }
+  .j-state { font-size:12.5px; color:var(--muted); }
+  .j-state strong { display:block; color:#fff; font-size:13.5px; margin-bottom:2px; }
+  .j-action { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text); }
+  .j-action::before { content:'→'; color:var(--accent); font-weight:bold; flex-shrink:0; }
+  .j-diff { font-family:'DM Mono',monospace; font-size:10.5px; color:var(--accent2); text-align:right; background:rgba(124,58,237,.08); border:1px solid rgba(124,58,237,.15); padding:4px 10px; border-radius:6px; }
+
+  /* TABLE */
+  .info-table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  .info-table th { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); padding:9px 14px; border-bottom:1px solid var(--border); text-align:left; }
+  .info-table td { padding:10px 14px; color:var(--text); border-bottom:1px solid rgba(255,255,255,.04); vertical-align:top; font-size:13px; }
+  .info-table tr:last-child td { border-bottom:none; }
+  .info-table tr td:first-child { color:var(--accent); font-weight:600; }
+
+  /* ADVAN GRID */
+  .advan-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; flex:1; }
+  .advan-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 18px; display:flex; flex-direction:column; gap:10px; position:relative; overflow:hidden; }
+  .advan-card::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent3),transparent); }
+  .advan-num   { font-family:'DM Mono',monospace; font-size:28px; font-weight:500; color:rgba(0,229,255,.08); line-height:1; }
+  .advan-icon  { font-size:22px; }
+  .advan-title { font-family:'Syne',sans-serif; font-size:15px; font-weight:700; color:#fff; }
+  .advan-desc  { font-size:12.5px; color:var(--muted); line-height:1.6; }
+
+  /* APP GRID */
+  .app-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; flex:1; align-content:start; margin-top:6px; }
+  .app-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 14px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:9px; }
+  .app-icon { font-size:28px; }
+  .app-name { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:#fff; }
+  .app-desc { font-size:11px; color:var(--muted); line-height:1.5; }
+
+  /* LIMITATIONS */
+  .limit-list  { display:flex; flex-direction:column; gap:14px; }
+  .limit-item  { display:flex; gap:14px; align-items:flex-start; background:var(--surface); border:1px solid rgba(239,68,68,.15); border-radius:10px; padding:14px 18px; }
+  .limit-icon  { width:34px; height:34px; flex-shrink:0; background:rgba(239,68,68,.1); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .limit-text h4 { font-size:13.5px; font-weight:600; color:#f87171; margin-bottom:4px; }
+  .limit-text p  { font-size:12.5px; color:var(--muted); line-height:1.6; }
+
+  /* CONCLUSION */
+  .conclusion-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; flex:1; }
+  .conc-item   { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 22px; display:flex; gap:14px; align-items:flex-start; }
+  .conc-icon   { font-size:22px; flex-shrink:0; width:42px; height:42px; background:rgba(0,229,255,.08); border-radius:10px; display:flex; align-items:center; justify-content:center; }
+  .conc-text h4 { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:#fff; margin-bottom:5px; }
+  .conc-text p  { font-size:12.5px; color:var(--muted); line-height:1.6; }
+
+  /* SUBGOAL BOX */
+  .subgoal-box {
+    background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(0,229,255,.04));
+    border:1px solid rgba(124,58,237,.25);
+    border-radius:12px; padding:18px 22px;
+    display:flex; gap:16px; align-items:flex-start;
+    margin-top:16px;
+  }
+  .subgoal-icon { font-size:22px; flex-shrink:0; }
+  .subgoal-text { font-size:13px; color:var(--text); line-height:1.65; }
+  .subgoal-text strong { color:#a78bfa; }
+
+  /* OBSTACLE LEGEND */
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+  .legend-item { display:flex; align-items:center; gap:7px; font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); }
+  .legend-dot { width:10px; height:10px; border-radius:50%; }
+
+  /* NAV — auto-hide */
+  .nav {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    display:flex; align-items:center; gap:10px;
+    background:rgba(12,16,32,.92); border:1px solid var(--border);
+    border-radius:50px; padding:9px 18px; z-index:100; backdrop-filter:blur(12px);
+    opacity:1; transition:opacity .4s ease, transform .4s ease;
+  }
+  .nav.ui-hidden { opacity:0; pointer-events:none; transform:translateX(-50%) translateY(12px); }
+  .nav-btn { width:34px; height:34px; border-radius:50%; background:var(--surface2); border:1px solid var(--border); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all .2s; }
+  .nav-btn:hover { background:rgba(0,229,255,.15); border-color:var(--accent); color:var(--accent); }
+  .nav-progress { display:flex; gap:5px; align-items:center; }
+  .nav-dot { width:6px; height:6px; border-radius:50%; background:var(--surface2); border:1px solid var(--border); cursor:pointer; transition:all .2s; }
+  .nav-dot.active { background:var(--accent); border-color:var(--accent); width:18px; border-radius:3px; }
+  .nav-counter { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); min-width:38px; text-align:center; }
+
+  .kbd-hint {
+    position:fixed; bottom:26px; right:26px;
+    font-family:'DM Mono',monospace; font-size:10px; color:var(--muted);
+    display:flex; gap:6px; align-items:center; opacity:.45;
+    transition:opacity .4s ease;
+  }
+  .kbd-hint.ui-hidden { opacity:0; pointer-events:none; }
+  kbd { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:2px 6px; font-size:10px; color:var(--muted); }
+  .fs-btn {
+    position:fixed; top:18px; right:18px; width:34px; height:34px; border-radius:8px;
+    background:rgba(12,16,32,.8); border:1px solid var(--border); color:var(--muted);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    font-size:14px; z-index:100; backdrop-filter:blur(8px);
+    opacity:1; transition:opacity .4s ease, color .2s, border-color .2s;
+  }
+  .fs-btn.ui-hidden { opacity:0; pointer-events:none; }
+  .fs-btn:hover { color:var(--accent); border-color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- ══════════════════════════════════════════
+     SLIDE 1 — TITLE
+══════════════════════════════════════════ -->
+<div class="slide slide-title active" id="s1">
+  <div class="grid-bg"></div>
+  <div class="title-deco"></div>
+  <div class="title-ring"></div>
+  <div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;text-align:center;">
+    <div class="title-badge"><span></span> Heuristic Problem Solving · Artificial Intelligence</div>
+    <h1 class="main-title">Means-End<br/><em>Analysis</em> in AI</h1>
+    <p class="subtitle">A heuristic-driven, goal-oriented strategy that reduces the gap between the current state and the desired outcome through iterative difference elimination</p>
+    <div class="title-meta">
+      <div class="title-meta-item"><div class="dot"></div>Seminar Presentation</div>
+      <div class="title-meta-item"><div class="dot"></div>4th Semester · CSE / AI</div>
+      <div class="title-meta-item"><div class="dot"></div>SRMIST Trichy</div>
+    </div>
+    <div style="margin-top:28px;display:flex;align-items:stretch;gap:0;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.15);border-radius:12px;overflow:hidden;">
+      <div style="padding:14px 24px;border-right:1px solid rgba(0,229,255,0.12);display:flex;flex-direction:column;gap:5px;align-items:flex-start;">
+        <div style="font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;">Presented By</div>
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#fff;letter-spacing:-.01em;">R S Hareecharan</div>
+      </div>
+      <div style="padding:14px 24px;display:flex;flex-direction:column;gap:5px;align-items:flex-start;">
+        <div style="font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;">Register No.</div>
+        <div style="font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--accent);">331</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 2 — INTRO: AI PROBLEM SOLVING
+══════════════════════════════════════════ -->
+<div class="slide" id="s2">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">01 · Introduction</span>
+    <span class="slide-num">02 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">AI <span class="accent">Problem Solving</span></h2>
+    <div class="section-line"></div>
+    <div class="two-col" style="gap:26px;flex:1;">
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="highlight-box">
+          AI problem solving = <strong>navigating a state space</strong> via search and decision-making to find a valid path from an initial configuration to a goal configuration.
+        </div>
+        <ul class="bullet-list">
+          <li><span class="icon">🗺️</span><span><strong>State Space</strong> — the set of all possible configurations the system can be in; search explores this space systematically</span></li>
+          <li><span class="icon">🔍</span><span><strong>Search Strategy</strong> — determines how the space is traversed: blind (BFS/DFS) vs. informed (heuristic-guided)</span></li>
+          <li><span class="icon">🛤️</span><span><strong>Path to Goal</strong> — a sequence of operators that transforms the initial state into the goal state</span></li>
+          <li><span class="icon">⚖️</span><span><strong>Decision Making</strong> — at each node, the agent selects the operator most likely to advance toward the goal</span></li>
+        </ul>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="card">
+          <div class="card-label">Initial State S₀</div>
+          <div class="card-title">Entry Point of Search</div>
+          <div class="card-body">The fully described starting configuration. All states reachable via operators define the <strong>search tree</strong> rooted here.</div>
+        </div>
+        <div class="card" style="border-color:rgba(16,185,129,.25);">
+          <div class="card-label" style="color:var(--accent3);">Goal State S*</div>
+          <div class="card-title">Terminal Condition</div>
+          <div class="card-body">The desired configuration. A <strong>goal test</strong> checks whether the current state satisfies all goal conditions — search terminates here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 3 — WHAT IS MEA
+══════════════════════════════════════════ -->
+<div class="slide" id="s3">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">02 · Definition</span>
+    <span class="slide-num">03 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">What is <span class="accent">Means-End Analysis?</span></h2>
+    <div class="section-line"></div>
+    <div class="def-block">
+      <p class="def-text">A <em>heuristic-based problem-solving strategy</em> that computes the <em>difference</em> between the current state and the goal state, selects the operator most likely to <em>reduce that difference</em>, and decomposes the problem into <em>sub-goals</em> — iterating until the difference reaches zero.</p>
+    </div>
+    <div class="two-col" style="flex:0;gap:18px;">
+      <div class="card">
+        <div class="card-label">Key Mechanism</div>
+        <div class="card-title">🔍 Reduces Search Space</div>
+        <div class="card-body">Instead of blind expansion of all states, MEA applies a <strong>difference function δ(S, G)</strong> as a heuristic — pruning irrelevant branches and focusing computation on goal-directed transitions.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Origin · Newell & Simon, 1961</div>
+        <div class="card-title">💡 General Problem Solver (GPS)</div>
+        <div class="card-body">MEA was the core engine of GPS — the first AI system to separate <strong>problem-solving strategy from domain knowledge</strong>. It laid the foundation for modern planning and search algorithms.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 4 — CORE COMPONENTS
+══════════════════════════════════════════ -->
+<div class="slide" id="s4">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">03 · Core Components</span>
+    <span class="slide-num">04 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">The Four <span class="accent">Core Components</span></h2>
+    <div class="section-line"></div>
+    <div class="four-col" style="flex:1;">
+      <!-- Card 1 -->
+      <div style="background:var(--surface);border:1.5px solid rgba(0,229,255,.3);border-radius:16px;padding:28px 22px;display:flex;flex-direction:column;gap:0;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),transparent);"></div>
+        <div style="font-size:44px;margin-bottom:16px;line-height:1;">📍</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;color:var(--accent);text-transform:uppercase;margin-bottom:10px;">Component 01</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--accent);margin-bottom:16px;letter-spacing:-.01em;">Current State</div>
+        <div style="width:32px;height:2px;background:rgba(0,229,255,.3);border-radius:2px;margin-bottom:18px;"></div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75;flex:1;">The <strong style="color:#fff">complete, fully described</strong> snapshot of the world at any point during execution. Serves as the input to the difference function <strong style="color:var(--accent)">δ(S,G)</strong> at each iteration.</div>
+        <div style="margin-top:20px;background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.12);border-radius:8px;padding:10px 14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);">State S = {attributes}</div>
+      </div>
+      <!-- Card 2 -->
+      <div style="background:var(--surface);border:1.5px solid rgba(124,58,237,.3);border-radius:16px;padding:28px 22px;display:flex;flex-direction:column;gap:0;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent2),transparent);"></div>
+        <div style="font-size:44px;margin-bottom:16px;line-height:1;">🏁</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;color:#a78bfa;text-transform:uppercase;margin-bottom:10px;">Component 02</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#a78bfa;margin-bottom:16px;letter-spacing:-.01em;">Goal State</div>
+        <div style="width:32px;height:2px;background:rgba(124,58,237,.3);border-radius:2px;margin-bottom:18px;"></div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75;flex:1;">The <strong style="color:#fff">target configuration</strong> formally specified as a set of conditions. Must be precisely defined — ambiguity in the goal leads to <strong style="color:#a78bfa">misdirected search</strong>.</div>
+        <div style="margin-top:20px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.15);border-radius:8px;padding:10px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#a78bfa;">Goal G = {target conditions}</div>
+      </div>
+      <!-- Card 3 -->
+      <div style="background:var(--surface);border:1.5px solid rgba(251,191,36,.3);border-radius:16px;padding:28px 22px;display:flex;flex-direction:column;gap:0;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#fbbf24,transparent);"></div>
+        <div style="font-size:44px;margin-bottom:16px;line-height:1;">⚡</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;color:#fbbf24;text-transform:uppercase;margin-bottom:10px;">Component 03</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#fbbf24;margin-bottom:16px;letter-spacing:-.01em;">Difference δ</div>
+        <div style="width:32px;height:2px;background:rgba(251,191,36,.3);border-radius:2px;margin-bottom:18px;"></div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75;flex:1;">A <strong style="color:#fff">measurable gap</strong> between current and goal states. The magnitude of δ directly drives operator selection — higher δ means more work remains.</div>
+        <div style="margin-top:20px;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.15);border-radius:8px;padding:10px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#fbbf24;">δ(S, G) = G − S</div>
+      </div>
+      <!-- Card 4 -->
+      <div style="background:var(--surface);border:1.5px solid rgba(16,185,129,.3);border-radius:16px;padding:28px 22px;display:flex;flex-direction:column;gap:0;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent3),transparent);"></div>
+        <div style="font-size:44px;margin-bottom:16px;line-height:1;">🔧</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;color:var(--accent3);text-transform:uppercase;margin-bottom:10px;">Component 04</div>
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--accent3);margin-bottom:16px;letter-spacing:-.01em;">Operators</div>
+        <div style="width:32px;height:2px;background:rgba(16,185,129,.3);border-radius:2px;margin-bottom:18px;"></div>
+        <div style="font-size:14px;color:var(--muted);line-height:1.75;flex:1;">Actions that <strong style="color:#fff">produce state transitions</strong>. Each operator is heuristically matched to the detected δ — the one that most efficiently reduces the gap is selected.</div>
+        <div style="margin-top:20px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.15);border-radius:8px;padding:10px 14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--accent3);">O(δ) → S′ closer to G</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 5 — WORKING PROCESS
+══════════════════════════════════════════ -->
+<div class="slide" id="s5">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">04 · Working Process</span>
+    <span class="slide-num">05 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">Iterative <span class="accent">Refinement Process</span></h2>
+    <div class="section-line"></div>
+    <div class="steps" style="flex:1;justify-content:center;">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-text"><strong>Evaluate</strong> the current state against the goal state — establish the problem context and identify all measurable attributes</div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-text"><strong>Compute Difference δ(S, G)</strong> — quantify the gap between current and goal; if δ = 0, terminate. Otherwise, rank differences by priority</div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-text"><strong>Select Optimal Operator</strong> — choose the action heuristically matched to the most critical difference; create <strong>sub-goals if preconditions are unmet</strong></div>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <div class="step-text"><strong>Apply Operator</strong> — execute the selected action to trigger a state transition, producing a new state Sₙ₊₁ closer to the goal</div>
+      </div>
+      <div class="step" style="border-color:rgba(16,185,129,.3);">
+        <div class="step-num" style="background:linear-gradient(135deg,var(--accent3),#059669)">05</div>
+        <div class="step-text"><strong>Iterative Refinement</strong> — set Sₙ₊₁ as the new current state; re-enter the loop until δ(S, G) = 0 → <strong style="color:var(--accent3)">Goal Achieved</strong></div>
+      </div>
+    </div>
+    <div class="subgoal-box">
+      <div class="subgoal-icon">🔗</div>
+      <div class="subgoal-text">
+        <strong>Sub-goals in MEA:</strong> When an operator's precondition is not satisfied, MEA creates a <strong>sub-goal</strong> — a smaller intermediate target that must be achieved first. This hierarchical decomposition allows complex problems to be solved as a <strong>chain of simpler goals</strong>, each resolved recursively before the parent operator is applied.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 6 — REAL-LIFE EXAMPLE
+══════════════════════════════════════════ -->
+<div class="slide" id="s6">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">05 · Real-Life Example</span>
+    <span class="slide-num">06 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">MEA Applied: <span class="accent">Getting a Job</span></h2>
+    <div class="section-line"></div>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <div class="tag">📍 S₀: Unemployed, no credentials</div>
+      <div class="tag green">🏁 S*: Employed at a company</div>
+      <div class="tag purple">δ: Qualifications + Opportunity gap</div>
+    </div>
+    <div class="journey-flow">
+      <div class="journey-step" style="background:rgba(0,229,255,.04);border-color:rgba(0,229,255,.2);">
+        <div class="j-state"><strong>No resume, no portfolio</strong>Skill gap unaddressed</div>
+        <div class="j-action">Build resume; develop projects to demonstrate skill</div>
+        <div class="j-diff">δ: No verifiable credentials</div>
+      </div>
+      <div class="journey-step">
+        <div class="j-state"><strong>Credentials established</strong>Not visible to recruiters</div>
+        <div class="j-action">Submit targeted applications to relevant companies</div>
+        <div class="j-diff">δ: No employer contact</div>
+      </div>
+      <div class="journey-step">
+        <div class="j-state"><strong>Interview scheduled</strong>Technical gaps remain</div>
+        <div class="j-action">Intensive interview prep — DS&A, system design, HR</div>
+        <div class="j-diff">δ: Interview uncleared</div>
+      </div>
+      <div class="journey-step">
+        <div class="j-state"><strong>Interview cleared</strong>No formal agreement</div>
+        <div class="j-action">Evaluate, negotiate offer terms and sign the contract</div>
+        <div class="j-diff">δ: No offer accepted</div>
+      </div>
+      <div class="journey-step" style="border-color:rgba(16,185,129,.3);">
+        <div class="j-state"><strong style="color:var(--accent3)">Employed ✓ · S* Reached</strong>All conditions satisfied</div>
+        <div class="j-action" style="color:var(--accent3)">No further operator needed — δ(S, G) = 0</div>
+        <div class="j-diff" style="color:var(--accent3);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.08);">δ = 0 · Solved 🎉</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 7 — FLOWCHART
+══════════════════════════════════════════ -->
+<div class="slide" id="s7">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">06 · Process Flowchart</span>
+    <span class="slide-num">07 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">MEA <span class="accent">Control Flow</span></h2>
+    <div class="section-line"></div>
+    <div class="flow-diagram">
+      <div class="flow-node">
+        <div class="flow-box highlighted">
+          <div class="flow-box-icon">📍</div>
+          <div class="flow-box-label">Current State</div>
+          <div class="flow-box-sub">Sₙ · Entry Point</div>
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">HEURISTIC<br/>EVALUATION</div>
+      </div>
+      <div class="flow-node">
+        <div class="flow-box" style="border-color:rgba(251,191,36,.45);box-shadow:0 0 20px rgba(251,191,36,.1);">
+          <div class="flow-box-icon">⚡</div>
+          <div class="flow-box-label">Difference Fn</div>
+          <div class="flow-box-sub">δ(Sₙ, G) computed</div>
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">OPERATOR<br/>MATCHING</div>
+      </div>
+      <div class="flow-node">
+        <div class="flow-box" style="border-color:rgba(124,58,237,.45);box-shadow:0 0 20px rgba(124,58,237,.1);">
+          <div class="flow-box-icon">🔧</div>
+          <div class="flow-box-label">Apply Operator</div>
+          <div class="flow-box-sub">O(δ) → reduces gap</div>
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">STATE<br/>TRANSITION</div>
+      </div>
+      <div class="flow-node">
+        <div class="flow-box" style="border-color:rgba(99,102,241,.4);">
+          <div class="flow-box-icon">🔄</div>
+          <div class="flow-box-label">New State</div>
+          <div class="flow-box-sub">Sₙ₊₁ · δ reduced</div>
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">GOAL<br/>TEST δ=0?</div>
+      </div>
+      <div class="flow-node">
+        <div class="flow-box goal-box">
+          <div class="flow-box-icon">🏁</div>
+          <div class="flow-box-label">Goal Reached</div>
+          <div class="flow-box-sub">δ = 0 · SOLVED ✓</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:center;margin-top:18px;">
+      <div style="background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:9px 18px;font-size:11.5px;color:#a78bfa;font-family:'DM Mono',monospace;">
+        ↺ If δ ≠ 0 after transition → loop back with Sₙ₊₁ · Sub-goal created if operator precondition unmet
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 8 — CASE STUDY: ROBOT NAVIGATION
+══════════════════════════════════════════ -->
+<div class="slide" id="s8">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">07 · Case Study</span>
+    <span class="slide-num">08 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">Case Study: <span class="accent">Robot Navigation with Obstacle</span></h2>
+    <div class="section-line"></div>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <div class="tag">🤖 Agent: Autonomous Robot</div>
+      <div class="tag">📍 Start: Room A</div>
+      <div class="tag green">🏁 Goal: Room D</div>
+      <div class="tag red">🚧 Constraint: Path A→B Blocked</div>
+    </div>
+
+    <!-- BIG PATH DIAGRAM -->
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:0;position:relative;padding:0 20px;">
+
+      <!-- Node A -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="width:100px;height:100px;border-radius:50%;background:rgba(0,229,255,.15);border:2.5px solid var(--accent);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--accent);box-shadow:0 0 30px rgba(0,229,255,.15);">A</div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">ROOM A</div>
+        <div style="font-size:11px;color:var(--muted);text-align:center;">Start</div>
+      </div>
+
+      <!-- A→B blocked connector -->
+      <div style="display:flex;flex-direction:column;align-items:center;padding-bottom:46px;padding-top:0;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--danger);letter-spacing:.08em;margin-bottom:4px;">BLOCKED</div>
+        <div style="width:70px;height:2.5px;background:rgba(239,68,68,.35);position:relative;display:flex;align-items:center;justify-content:center;">
+          <span style="color:var(--danger);font-size:16px;font-weight:900;line-height:1;">✕</span>
+        </div>
+      </div>
+
+      <!-- Node B blocked -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="width:100px;height:100px;border-radius:50%;background:rgba(239,68,68,.12);border:2.5px dashed var(--danger);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--danger);">B</div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--danger);">ROOM B</div>
+        <div style="font-size:11px;color:#f87171;text-align:center;">Obstacle</div>
+      </div>
+
+      <!-- Wide spacer + MEA Decision box -->
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 16px;padding-bottom:46px;">
+        <div style="background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.3);border-radius:12px;padding:14px 18px;text-align:center;min-width:130px;">
+          <div style="font-size:22px;margin-bottom:6px;">🧠</div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--warn);letter-spacing:.1em;margin-bottom:4px;">MEA DECISION</div>
+          <div style="font-size:12px;color:#fff;line-height:1.5;">Select alternate<br/>operator: <strong style="color:var(--warn);">A→E</strong></div>
+        </div>
+      </div>
+
+      <!-- A→E alt connector -->
+      <div style="display:flex;flex-direction:column;align-items:center;padding-bottom:46px;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--warn);letter-spacing:.08em;margin-bottom:4px;">ALT ROUTE</div>
+        <div style="width:70px;height:2.5px;background:linear-gradient(90deg,var(--warn),rgba(245,158,11,.4));position:relative;">
+          <span style="position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--warn);font-size:10px;">▶</span>
+        </div>
+      </div>
+
+      <!-- Node E alternate -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="width:100px;height:100px;border-radius:50%;background:rgba(245,158,11,.12);border:2.5px solid var(--warn);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--warn);box-shadow:0 0 24px rgba(245,158,11,.12);">E</div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--warn);">ROOM E</div>
+        <div style="font-size:11px;color:var(--warn);text-align:center;">Alt Path</div>
+      </div>
+
+      <!-- E→C connector -->
+      <div style="display:flex;flex-direction:column;align-items:center;padding-bottom:46px;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.08em;margin-bottom:4px;">MOVE</div>
+        <div style="width:70px;height:2.5px;background:linear-gradient(90deg,rgba(124,58,237,.6),rgba(0,229,255,.6));position:relative;">
+          <span style="position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--accent);font-size:10px;">▶</span>
+        </div>
+      </div>
+
+      <!-- Node C -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="width:100px;height:100px;border-radius:50%;background:rgba(124,58,237,.15);border:2.5px solid var(--accent2);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--accent2);">C</div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">ROOM C</div>
+        <div style="font-size:11px;color:var(--muted);text-align:center;">Intermediate</div>
+      </div>
+
+      <!-- C→D connector -->
+      <div style="display:flex;flex-direction:column;align-items:center;padding-bottom:46px;">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.08em;margin-bottom:4px;">MOVE</div>
+        <div style="width:70px;height:2.5px;background:linear-gradient(90deg,rgba(0,229,255,.6),var(--accent3));position:relative;">
+          <span style="position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--accent3);font-size:10px;">▶</span>
+        </div>
+      </div>
+
+      <!-- Node D GOAL -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="width:100px;height:100px;border-radius:50%;background:rgba(16,185,129,.18);border:2.5px solid var(--accent3);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--accent3);box-shadow:0 0 36px rgba(16,185,129,.25);">D</div>
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent3);">ROOM D</div>
+        <div style="font-size:11px;color:var(--accent3);text-align:center;">Goal ✓</div>
+      </div>
+    </div>
+
+    <!-- COMPACT TABLE -->
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px;">
+      <thead>
+        <tr>
+          <th style="font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:7px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;">Step</th>
+          <th style="font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:7px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;">Current State</th>
+          <th style="font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:7px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;">Difference δ</th>
+          <th style="font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:7px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;">Operator Evaluated</th>
+          <th style="font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:7px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;">Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:6px 12px;color:var(--accent);font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">1</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">Room A</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">3 rooms from D</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">Move A → B (direct)</td><td style="padding:6px 12px;color:var(--danger);border-bottom:1px solid rgba(255,255,255,.04);">✕ Blocked — operator rejected</td></tr>
+        <tr><td style="padding:6px 12px;color:var(--accent);font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">2</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">Room A</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">3 rooms from D</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">Move A → E (alternate)</td><td style="padding:6px 12px;color:var(--warn);border-bottom:1px solid rgba(255,255,255,.04);">✓ Sub-goal: reach E first</td></tr>
+        <tr><td style="padding:6px 12px;color:var(--accent);font-weight:600;border-bottom:1px solid rgba(255,255,255,.04);">3</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">Room E</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">2 rooms from D</td><td style="padding:6px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,.04);">Move E → C</td><td style="padding:6px 12px;color:var(--accent);border-bottom:1px solid rgba(255,255,255,.04);">✓ δ reduced</td></tr>
+        <tr><td style="padding:6px 12px;color:var(--accent);font-weight:600;">4</td><td style="padding:6px 12px;color:var(--text);">Room C</td><td style="padding:6px 12px;color:var(--text);">1 room from D</td><td style="padding:6px 12px;color:var(--text);">Move C → D</td><td style="padding:6px 12px;color:var(--accent3);">✓ Goal achieved · δ = 0</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 9 — ADVANTAGES
+══════════════════════════════════════════ -->
+<div class="slide" id="s9">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">08 · Advantages</span>
+    <span class="slide-num">09 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">Why <span class="accent">MEA Works</span></h2>
+    <div class="section-line"></div>
+    <div class="advan-grid">
+      <div class="advan-card">
+        <div class="advan-num">01</div>
+        <div class="advan-icon">🎯</div>
+        <div class="advan-title">Reduces Search Space</div>
+        <div class="advan-desc">The difference function acts as a <strong>pruning heuristic</strong> — irrelevant states are never expanded, keeping computation tightly focused on goal-directed paths.</div>
+      </div>
+      <div class="advan-card">
+        <div class="advan-num">02</div>
+        <div class="advan-icon">⚡</div>
+        <div class="advan-title">Improves Decision Efficiency</div>
+        <div class="advan-desc">Operator selection is heuristically guided rather than exhaustive — each decision is <strong>informed by the magnitude of δ</strong>, not random trial.</div>
+      </div>
+      <div class="advan-card">
+        <div class="advan-num">03</div>
+        <div class="advan-icon">🔗</div>
+        <div class="advan-title">Hierarchical Sub-Goaling</div>
+        <div class="advan-desc">Complex problems are <strong>recursively decomposed</strong> into sub-goals. Each sub-goal is solved independently, reducing cognitive and computational load.</div>
+      </div>
+      <div class="advan-card">
+        <div class="advan-num">04</div>
+        <div class="advan-icon">🔁</div>
+        <div class="advan-title">Adaptive & Iterative</div>
+        <div class="advan-desc">The loop architecture allows the agent to <strong>dynamically recompute</strong> δ after each transition — adapting to state changes in real time.</div>
+      </div>
+      <div class="advan-card">
+        <div class="advan-num">05</div>
+        <div class="advan-icon">🧠</div>
+        <div class="advan-title">Cognitively Grounded</div>
+        <div class="advan-desc">Mirrors human problem-solving cognition — psychologically validated by Newell & Simon. Makes agent behavior <strong>interpretable and explainable</strong>.</div>
+      </div>
+      <div class="advan-card">
+        <div class="advan-num">06</div>
+        <div class="advan-icon">🌐</div>
+        <div class="advan-title">Domain-Independent</div>
+        <div class="advan-desc">The MEA framework is <strong>decoupled from domain knowledge</strong> — the same algorithm applies to robotics, planning, game AI, and NLP with only operator definitions changing.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 10 — APPLICATIONS
+══════════════════════════════════════════ -->
+<div class="slide" id="s10">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">09 · Applications</span>
+    <span class="slide-num">10 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">Real-World <span class="accent">Applications</span></h2>
+    <div class="section-line"></div>
+    <div class="app-grid">
+      <div class="app-card">
+        <div class="app-icon">🤖</div>
+        <div class="app-name">Autonomous Robotics</div>
+        <div class="app-desc">Task planning, dynamic obstacle avoidance, and multi-step manipulation in robotic agents</div>
+      </div>
+      <div class="app-card">
+        <div class="app-icon">🗺️</div>
+        <div class="app-name">GPS Navigation</div>
+        <div class="app-desc">Real-time rerouting by recomputing δ(current position, destination) after each state change</div>
+      </div>
+      <div class="app-card">
+        <div class="app-icon">🎮</div>
+        <div class="app-name">Game AI</div>
+        <div class="app-desc">NPC decision-making and goal-directed behaviour in complex game environments</div>
+      </div>
+      <div class="app-card">
+        <div class="app-icon">📋</div>
+        <div class="app-name">Automated Planning</div>
+        <div class="app-desc">STRIPS and PDDL-based planning systems use MEA as the core operator-selection strategy</div>
+      </div>
+      <div class="app-card">
+        <div class="app-icon">🧠</div>
+        <div class="app-name">Intelligent Agents</div>
+        <div class="app-desc">BDI (Belief-Desire-Intention) agents use MEA-style reasoning to pursue and revise goals</div>
+      </div>
+      <div class="app-card">
+        <div class="app-icon">🏥</div>
+        <div class="app-name">Clinical Decision Support</div>
+        <div class="app-desc">Narrows diagnosis by iteratively reducing symptom-to-condition difference at each step</div>
+      </div>
+      <div class="app-card">
+        <div class="app-icon">🚀</div>
+        <div class="app-name">Autonomous Systems</div>
+        <div class="app-desc">Space rovers (NASA Curiosity) and UAVs use MEA-based planners for terrain navigation</div>
+      </div>
+      <div class="app-card">
+        <div class="app-icon">⚙️</div>
+        <div class="app-name">Planning Systems</div>
+        <div class="app-desc">Supply chain and workflow engines apply MEA to close gaps between current and target operational states</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 11 — LIMITATIONS
+══════════════════════════════════════════ -->
+<div class="slide" id="s11">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">10 · Limitations</span>
+    <span class="slide-num">11 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">Technical <span class="accent">Limitations</span></h2>
+    <div class="section-line"></div>
+    <div class="limit-list">
+      <div class="limit-item">
+        <div class="limit-icon">⚠️</div>
+        <div class="limit-text">
+          <h4>Accuracy of the Difference Function</h4>
+          <p>MEA's entire intelligence rests on <strong>δ(S, G) being well-defined</strong>. A poorly designed difference function leads to mismatched operator selection — the agent moves confidently in the wrong direction, a failure mode known as <em>misdirected search</em>.</p>
+        </div>
+      </div>
+      <div class="limit-item">
+        <div class="limit-icon">🌀</div>
+        <div class="limit-text">
+          <h4>Local Optimum Trap</h4>
+          <p>Greedy difference reduction can lead to a <strong>local minimum</strong> — a state where no single operator reduces δ, yet the goal hasn't been reached. MEA has no built-in backtracking or global lookahead to escape these traps.</p>
+        </div>
+      </div>
+      <div class="limit-item">
+        <div class="limit-icon">🔗</div>
+        <div class="limit-text">
+          <h4>Circular Sub-Goal Dependencies</h4>
+          <p>If operator A requires precondition B, which in turn requires A — the system enters an <strong>infinite dependency loop</strong>. Without cycle detection or constraint propagation, MEA cannot resolve mutually dependent sub-goals.</p>
+        </div>
+      </div>
+      <div class="limit-item">
+        <div class="limit-icon">📉</div>
+        <div class="limit-text">
+          <h4>No Global Optimality Guarantee</h4>
+          <p>MEA is a <strong>heuristic strategy, not an optimal planner</strong> — it finds a valid path but not necessarily the shortest. For cost-optimal solutions, algorithms like A* with admissible heuristics or dynamic programming are required.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SLIDE 12 — CONCLUSION
+══════════════════════════════════════════ -->
+<div class="slide" id="s12">
+  <div class="grid-bg"></div>
+  <div class="slide-header">
+    <span class="slide-label">11 · Conclusion</span>
+    <span class="slide-num">12 / 12</span>
+  </div>
+  <div class="slide-content">
+    <h2 class="content-title">Key <span class="accent">Takeaways</span></h2>
+    <div class="section-line"></div>
+    <div class="conclusion-grid" style="flex:1;">
+      <div class="conc-item">
+        <div class="conc-icon">🧭</div>
+        <div class="conc-text">
+          <h4>Heuristic-Driven Strategy</h4>
+          <p>MEA is not blind search — it is a <strong>heuristic-guided planner</strong> that uses the difference function δ to focus computation on the most goal-relevant transitions at every step.</p>
+        </div>
+      </div>
+      <div class="conc-item">
+        <div class="conc-icon">⚡</div>
+        <div class="conc-text">
+          <h4>Difference Reduction as Intelligence</h4>
+          <p>The core insight of MEA is that <strong>intelligent behavior = systematic reduction of δ(S, G)</strong>. Every action taken is justified by its contribution to closing the gap.</p>
+        </div>
+      </div>
+      <div class="conc-item">
+        <div class="conc-icon">🔗</div>
+        <div class="conc-text">
+          <h4>Sub-Goals Enable Scalability</h4>
+          <p>By decomposing large goals into a <strong>hierarchy of sub-goals</strong>, MEA scales to complex real-world problems — each sub-problem solved independently before the parent goal is addressed.</p>
+        </div>
+      </div>
+      <div class="conc-item">
+        <div class="conc-icon">🌐</div>
+        <div class="conc-text">
+          <h4>Foundation of Modern AI Planning</h4>
+          <p>MEA introduced the paradigm of <strong>goal-directed, operator-based problem solving</strong> — directly influencing STRIPS, HTN planning, BDI agent architectures, and autonomous systems.</p>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:18px;background:linear-gradient(135deg,rgba(0,229,255,.06),rgba(124,58,237,.06));border:1px solid rgba(0,229,255,.2);border-radius:12px;padding:16px 22px;display:flex;align-items:center;gap:14px;">
+      <div style="font-size:22px;">💡</div>
+      <div style="font-size:13.5px;color:var(--text);line-height:1.65;">
+        <strong style="color:var(--accent);">Bottom Line:</strong> Means-End Analysis is a <em style="color:#fff;">heuristic-driven, goal-oriented problem-solving strategy</em> that reduces search complexity through difference computation, adaptive operator selection, and hierarchical sub-goal decomposition — making it one of the most enduring frameworks in classical AI.
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- NAV -->
+<div class="nav" id="nav">
+  <button class="nav-btn" onclick="prev()">◀</button>
+  <div class="nav-progress" id="dots"></div>
+  <span class="nav-counter" id="counter">1 / 12</span>
+  <button class="nav-btn" onclick="next()">▶</button>
+</div>
+
+<div class="kbd-hint"><kbd>←</kbd><kbd>→</kbd> navigate &nbsp;·&nbsp;<kbd>F</kbd> fullscreen</div>
+<button class="fs-btn" onclick="toggleFS()">⛶</button>
+
+<script>
+  const TOTAL = 12;
+  let cur = 1;
+  const dotsEl    = document.getElementById('dots');
+  const counterEl = document.getElementById('counter');
+  const navEl     = document.getElementById('nav');
+  const kbdEl     = document.querySelector('.kbd-hint');
+  const fsEl      = document.querySelector('.fs-btn');
+
+  /* ── dot builder ── */
+  for (let i = 1; i <= TOTAL; i++) {
+    const d = document.createElement('div');
+    d.className = 'nav-dot' + (i === 1 ? ' active' : '');
+    d.addEventListener('click', () => { wakeUI(); goTo(i); });
+    dotsEl.appendChild(d);
+  }
+
+  /* ── slide transitions ── */
+  function goTo(n) {
+    if (n < 1 || n > TOTAL || n === cur) return;
+    const old = document.getElementById('s' + cur);
+    old.classList.add('out');
+    setTimeout(() => old.classList.remove('active', 'out'), 450);
+    cur = n;
+    document.getElementById('s' + cur).classList.add('active');
+    dotsEl.querySelectorAll('.nav-dot').forEach((d, i) => d.classList.toggle('active', i === cur - 1));
+    counterEl.textContent = cur + ' / ' + TOTAL;
+  }
+
+  function next() { goTo(cur + 1); }
+  function prev() { goTo(cur - 1); }
+
+  /* ── auto-hide UI ── */
+  const UI_TIMEOUT = 3000; // ms before hiding
+  let hideTimer = null;
+
+  function wakeUI() {
+    navEl.classList.remove('ui-hidden');
+    kbdEl.classList.remove('ui-hidden');
+    fsEl.classList.remove('ui-hidden');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(sleepUI, UI_TIMEOUT);
+  }
+
+  function sleepUI() {
+    navEl.classList.add('ui-hidden');
+    kbdEl.classList.add('ui-hidden');
+    fsEl.classList.add('ui-hidden');
+  }
+
+  // Wake on any mouse movement / click / keypress
+  document.addEventListener('mousemove', wakeUI);
+  document.addEventListener('mousedown', wakeUI);
+  document.addEventListener('touchstart', e => { wakeUI(); }, { passive: true });
+
+  // Keyboard nav — also wakes UI
+  document.addEventListener('keydown', e => {
+    wakeUI();
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); next(); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key))        { e.preventDefault(); prev(); }
+    if (e.key === 'f' || e.key === 'F') toggleFS();
+  });
+
+  // Swipe
+  let tx = 0;
+  document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); }
+  });
+
+  function toggleFS() {
+    document.fullscreenElement
+      ? document.exitFullscreen?.()
+      : document.documentElement.requestFullscreen?.();
+  }
+
+  // Kick off — show briefly then hide
+  wakeUI();
+</script>
+</body>
+</html>
